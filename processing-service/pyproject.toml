@@ -1,0 +1,37 @@
+[tool.poetry]
+name = "processing-service"
+version = "0.1.0"
+description = "Production-grade log processing service with Kafka, metrics, and tracing."
+authors = ["Khushal Singh <you@example.com>"]
+license = "MIT"
+packages = [{include = "app"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+aiokafka = "^0.13.0"
+pydantic = "^2.2.1"
+prometheus-client = "^0.17.1"
+opentelemetry-api = "^1.18.0"
+opentelemetry-sdk = "^1.18.0"
+confluent-kafka = "^2.2.1"
+python-dotenv = "^1.0.0"
+aiohttp = "^3.9.4"
+uvloop = "^0.22.0"
+elasticsearch = "^8.10.0"
+
+[tool.poetry.dev-dependencies]
+pytest = "^8.2.0"
+pytest-asyncio = "^0.21.0"
+black = "^23.12.0"
+flake8 = "^6.1.0"
+mypy = "^1.5.1"
+isort = "^5.13.2"
+
+
+[tool.poetry.scripts]
+start-consumer = "app.main:async_main_wrapper"
+start-metrics = "app.main:run_metrics_server"
+
+[build-system]
+requires = ["poetry-core>=1.5.0"]
+build-backend = "poetry.core.masonry.api"
