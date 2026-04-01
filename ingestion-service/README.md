@@ -195,7 +195,3 @@ services:
 * [aioredis](https://aioredis.readthedocs.io/)
 
 ---
-
-If you want, I can **also write a “FULL infra + ingestion + processing” README** showing **how Kafka, Redis, and ingestion-service work together end-to-end**, with diagrams, commands, and curl examples.
-
-Do you want me to do that next?

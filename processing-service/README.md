@@ -245,7 +245,3 @@ services:
 * [aiokafka](https://aiokafka.readthedocs.io/)
 
 ---
-
-If you want, I can now **write a single README for the full StreamLens stack** (Ingestion + Processing + Query + Kafka + Redis + Elasticsearch) with diagrams, curl examples, and production tips, so your repo has a **complete developer guide**.
-
-Do you want me to do that next?
