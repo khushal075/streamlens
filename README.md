@@ -190,11 +190,3 @@ streamlens/
 * [Asyncio](https://docs.python.org/3/library/asyncio.html)
 
 ---
-
-This README makes your repo **portfolio-ready**:
-
-* Shows **microservices architecture**
-* Highlights your **async, scalable, reliable system**
-* Includes **commands, screenshots, and demo flow** for recruiters or peers
-
----
