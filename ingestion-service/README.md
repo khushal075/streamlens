@@ -1,7 +1,3 @@
-Absolutely! Since your **ingestion service** is now production-ready with **Redis-backed durable queue** and **parallel enqueue**, we can write a **comprehensive README** that covers setup, usage, architecture, and production tips. Here’s a polished version:
-
----
-
 # 🟢 StreamLens Ingestion Service
 
 [![CI](https://github.com/khushal075/streamlens/actions/workflows/ci.yml/badge.svg)](https://github.com/khushal075/streamlens/actions/workflows/ci.yml)

@@ -1,7 +1,3 @@
-Perfect! Here’s a polished, **final README for the Processing Service** with the network diagram, ports table, and all essential info. You can use this as the official README for your repo.
-
----
-
 # 🟢 StreamLens Processing Service
 
 StreamLens **Processing Service** consumes logs from the ingestion queue (Redis/Kafka), performs **enrichment, parsing, normalization**, and indexes logs into **Elasticsearch** for fast querying.
