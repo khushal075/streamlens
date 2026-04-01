@@ -1,0 +1,18 @@
+[project]
+name = "streamlens-ingestion"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "aiokafka",
+    "pydantic",
+    "redis",
+    "python-snappy>=0.7.3",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "httpx"
+]
