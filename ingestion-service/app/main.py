@@ -13,5 +13,4 @@ app.include_router(logs_router)
 
 @app.on_event("startup")
 async def startup():
-    pass
-    #asyncio.create_task(kafka_worker())
+    asyncio.create_task(kafka_worker())
