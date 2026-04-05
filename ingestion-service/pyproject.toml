@@ -12,8 +12,14 @@ fastapi = "^0.111"
 uvicorn = "^0.25"
 aiokafka = "^0.13"
 pydantic = "^2.2"
-redis = "^7.0"
+redis = "^5.0.4"
 python-snappy = "^0.7.3"
+orjson = "^3.10.1"        # 🔥 Added for high-speed JSON & datetime support
+hiredis = "^2.3.2"       # 🔥 Added to make Redis Batching much faster
+clickhouse-connect = "^0.7.8" # 🔥 Added for the ClickHouse storage layer
+aioredis = "^2.0.1"
+pydantic-settings = "^2.13.1"
+
 
 [tool.poetry.dev-dependencies]
 pytest = "^8.2"
