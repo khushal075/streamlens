@@ -1,7 +1,7 @@
 """
 Messaging Factory
 -----------------
-Role: Handles the instantiation and retrieval of messaging providers.
+Role: Singleton provider for Producers and Factory for Consumers.
 Pattern: Factory / Singleton.
 """
 
@@ -10,40 +10,58 @@ from typing import Optional
 from app.core.config import settings
 from app.messaging.base.producer import BaseProducer
 from app.messaging.kafka.kafka_producer import KafkaProducer
+from app.messaging.kafka.kafka_consumer import KafkaConsumer  # 👈 New Import
 
 logger = logging.getLogger(__name__)
 
 
 class MessagingFactory:
     """
-    A factory class to manage and provide messaging producers.
-
-    This ensures that we only ever have one producer instance (Singleton)
-    active in our application memory, preventing multiple socket
-    connections to the same broker.
+    Manages the lifecycle of messaging clients.
+    Ensures a single Producer connection while allowing multiple Consumers.
     """
 
-    _instance: Optional[BaseProducer] = None
+    _producer_instance: Optional[BaseProducer] = None
 
     @classmethod
     def get_producer(cls) -> BaseProducer:
         """
-        Returns the configured producer instance.
-        Initializes it if it doesn't exist.
+        Returns a singleton Producer instance.
         """
-        if cls._instance is None:
+        if cls._producer_instance is None:
             broker_type = settings.MESSAGE_BROKER.lower()
 
             if broker_type == "kafka":
-                cls._instance = KafkaProducer()
-            # Future-proof: elif broker_type == "rabbitmq": ...
+                cls._producer_instance = KafkaProducer()
             else:
                 logger.error(f"❌ Unsupported message broker: {broker_type}")
                 raise ValueError(f"Broker '{broker_type}' is not supported.")
 
-        return cls._instance
+        return cls._producer_instance
+
+    @staticmethod
+    def get_consumer(topic: str, group_id: str) -> KafkaConsumer:
+        """
+        Returns a NEW Kafka Consumer instance.
+        Consumers are typically NOT singletons because different workers
+        belong to different Consumer Groups.
+        """
+        broker_type = settings.MESSAGE_BROKER.lower()
+
+        if broker_type == "kafka":
+            return KafkaConsumer(topic=topic, group_id=group_id)
+
+        raise ValueError(f"Consumer for '{broker_type}' is not supported.")
 
 
-# --- Global Access Point ---
-# Instead of calling the factory every time, we export the resulting instance.
+# --- Public API Hooks ---
+
+# 1. Provide the singleton producer directly (for the Kafka Worker)
 messaging_producer = MessagingFactory.get_producer()
+
+# 2. Provide the functions (to match your 'from factory import get_producer' calls)
+def get_producer():
+    return MessagingFactory.get_producer()
+
+def get_consumer(topic: str, group_id: str):
+    return MessagingFactory.get_consumer(topic, group_id)

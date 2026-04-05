@@ -1,5 +1,9 @@
-from .base import WebBase
+import os
 from typing import Dict, Any
+from .base import WebBase
+
+# Defined at module level so it's only created once in memory
+STATIC_EXTENSIONS = {'.js', '.css', '.png', '.jpg', '.ico', '.svg', '.woff2'}
 
 
 class WebProcessor(WebBase):
@@ -8,12 +12,13 @@ class WebProcessor(WebBase):
     """
 
     def parse_message(self, raw_message: str) -> Dict[str, Any]:
-        # 1. Use Parent to get HTTP details
+        # 1. Use Parent (WebBase) to extract core regex fields
         web_meta = self.extract_web_metrics(raw_message)
 
         # 2. Logic: Categorize based on status code
-        status = web_meta["status_code"]
+        status = web_meta.get("status_code", 0)
         category = "SUCCESS"
+
         if 400 <= status < 500:
             category = "CLIENT_ERROR"
         elif status >= 500:
@@ -21,9 +26,10 @@ class WebProcessor(WebBase):
         elif status == 0:
             category = "MALFORMED"
 
-        # 3. Logic: Identify asset type
-        path = web_meta["path"].lower()
-        is_static = any(path.endswith(ext) for ext in ['.js', '.css', '.png', '.jpg', '.ico'])
+        # 3. Logic: Identify asset type (High Performance Set Lookup)
+        path = web_meta.get("path", "").lower()
+        _, ext = os.path.splitext(path)
+        is_static = ext in STATIC_EXTENSIONS
 
         return {
             **web_meta,

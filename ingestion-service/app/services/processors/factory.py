@@ -79,6 +79,11 @@ class LogProcessorFactory:
 
         return self._registry.get(source.lower(), self.default_processor)
 
+    def register_processor(self, source: str, processor: BaseLogProcessor):
+        """Allows dynamic registration of new log sources."""
+        self._registry[source.lower()] = processor
+        logger.info(f"✅ Registered new processor for source: {source}")
+
 
 # Global Instance for the Kafka Worker to import
 processor_factory = LogProcessorFactory()
