@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "streamlens-common"
+version = "0.1.0"
+description = "Shared logic"
+authors = ["Your Name <you@example.com>"]
+
+# This is the magic line. It tells Python:
+# "The package 'streamlens_common' is found directly inside the current folder."
+packages = [{include = "streamlens_common"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+pydantic = "^2.6.0"
+pydantic-settings = "^2.2.0"
+confluent-kafka = "^2.3.0"  # 👈 Add this line
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
