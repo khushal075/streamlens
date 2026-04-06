@@ -19,6 +19,9 @@ hiredis = "^2.3.2"       # 🔥 Added to make Redis Batching much faster
 clickhouse-connect = "^0.7.8" # 🔥 Added for the ClickHouse storage layer
 aioredis = "^2.0.1"
 pydantic-settings = "^2.13.1"
+streamlens-common = {path = "../common", develop = true}
+pandas = "^3.0.2"
+pyarrow = "^23.0.1"
 
 
 [tool.poetry.dev-dependencies]
