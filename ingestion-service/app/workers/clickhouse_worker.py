@@ -12,7 +12,8 @@ import signal
 from typing import List, Dict, Any
 
 from app.core.config import settings
-from app.messaging.factory import messaging_factory  # Assuming factory handles consumers
+from app.messaging.kafka.kafka_consumer import KafkaConsumer  # 👈 New Import
+from app.messaging.factory import get_consumer as get_messaging_consumer  # Assuming factory handles consumers
 from app.storage.factory import storage_client
 
 logger = logging.getLogger(__name__)
@@ -37,7 +38,7 @@ class ClickHouseWorker:
         storage_client.connect()
 
         # We need a consumer from the factory
-        self.consumer = messaging_factory.get_consumer(
+        self.consumer: KafkaConsumer = get_messaging_consumer(
             topic=settings.KAFKA_STRUCTURED_TOPIC,
             group_id="clickhouse-sink-group"
         )
@@ -88,23 +89,31 @@ class ClickHouseWorker:
 
 # --- EXECUTION ---
 
-async def run_worker():
+# RENAME this from 'run_worker' to 'ch_worker'
+async def ch_worker():
+    """
+    Main entry point for the ClickHouse Sink Worker.
+    Movement B: Kafka Topic --> DB Worker --> ClickHouse
+    """
     worker = ClickHouseWorker()
 
     # Handle OS signals for graceful shutdown (Docker/K8s)
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
+        # We use a lambda to ensure the worker.stop() is called correctly
         loop.add_signal_handler(sig, lambda: asyncio.create_task(worker.stop()))
+
+    # 💡 Small Fix: Ensure your 'start' method uses the right consumer method
+    # Change 'self.consumer.fetch_batch' to 'self.consumer.get_batch'
+    # to match our finalized kafka_consumer.py implementation.
 
     await worker.start()
 
-
+# --- Legacy Support ---
+# This allows 'python clickhouse_worker.py' to still work locally
 if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
+    logging.basicConfig(level=logging.INFO)
     try:
-        asyncio.run(run_worker())
+        asyncio.run(ch_worker())
     except KeyboardInterrupt:
         pass

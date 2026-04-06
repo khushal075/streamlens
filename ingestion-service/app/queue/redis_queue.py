@@ -143,4 +143,4 @@ class RedisQueue:
 
 # --- GLOBAL INSTANCE ---
 # This instance is imported and used by the Ingestion Service and Workers.
-log_queue = RedisQueue()
+redis_queue = RedisQueue()

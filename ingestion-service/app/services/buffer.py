@@ -7,7 +7,7 @@ Role: The 'Asynchronous Shock Absorber' of the ingestion pipeline.
 import json
 import logging
 from typing import List, Dict, Any, Optional
-import aioredis
+from redis import asyncio as aioredis
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)

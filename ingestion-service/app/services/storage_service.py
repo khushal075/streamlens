@@ -11,7 +11,7 @@ Purpose:
 
 import logging
 from typing import List, Dict, Any, Tuple
-from app.storage.clickhouse import ClickHouseClient
+from app.storage.clickhouse import ClickHouseStorage
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ class StorageService:
 
     def __init__(self):
         # Initialize the low-level database client
-        self.clickhouse_client = ClickHouseClient()
+        self.clickhouse_client = ClickHouseStorage()
 
     def _prepare_for_clickhouse(self, processed_logs: List[Dict[str, Any]]) -> List[Tuple]:
         """

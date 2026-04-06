@@ -1,58 +1,60 @@
-"""
-Log Ingestion Router
---------------------
-Role: The 'Front Desk' of the API.
-Patterns:
-- Facade: Delegates all logic to the IngestionService.
-- Guardian: Handles HTTP-level exceptions and status codes.
-"""
-
 import logging
-from fastapi import APIRouter, HTTPException, Request
+from typing import List
+from fastapi import APIRouter, HTTPException, Request, status
+from pydantic import BaseModel
 
-from app.models.log_model import LogRequest
+# --- NEW COMMON IMPORTS ---
+from streamlens_common.models import LogEnvelope        # The shared data contract
+from streamlens_common.logging.logger import get_logger # Standardized logging
+from app.core.config import settings                    # Updated to inherit from GlobalSettings
+
+# --- SERVICE IMPORTS ---
 from app.services.ingestion_service import ingestion_service
 from app.services.rate_limiter import rate_limiter
 from app.services.buffer import log_buffer
 
-logger = logging.getLogger(__name__)
+# Use the standardized logger
+logger = get_logger(__name__)
 router = APIRouter()
 
-# Thresholds for backpressure (Could also be moved to settings)
-MAX_QUEUE_THRESHOLD = 9000
+# 1. Update the Request Model to use the Common Envelope
+# If your API accepts a list of raw logs, we wrap them here.
+class IngestionRequest(BaseModel):
+    tenant_id: str
+    service: str
+    logs: List[dict] # Raw logs before they are "enveloped" by the service
 
-@router.post("/logs")
-async def ingest_logs(request: LogRequest, http_request: Request):
+@router.post("/logs", status_code=status.HTTP_202_ACCEPTED)
+async def ingest_logs(request: IngestionRequest, http_request: Request):
     """
     Primary endpoint for log ingestion.
-    Supports batch ingestion with multi-tenant rate limiting and backpressure.
+    Refactored to use streamlens_common.
     """
     tenant_id = request.tenant_id
     log_count = len(request.logs)
     client_ip = http_request.client.host
 
-    # 1. PROXY CHECK: Rate Limiting (Distributed Redis)
-    # We check before doing any heavy object allocation
-    if not await rate_limiter.is_allowed(str(tenant_id), log_count):
+    # 1. PROXY CHECK: Rate Limiting
+    if not await rate_limiter.is_allowed(tenant_id, log_count):
         logger.warning(f"Rate limit hit for tenant: {tenant_id}")
         raise HTTPException(
-            status_code=429,
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Rate limit exceeded. Please slow down."
         )
 
-    # 2. BACKPRESSURE: Check Buffer Health
+    # 2. BACKPRESSURE: Check Buffer Health (Using settings from common)
     current_size = await log_buffer.get_buffer_size()
-    if current_size > MAX_QUEUE_THRESHOLD:
+    if current_size > settings.MAX_QUEUE_THRESHOLD: # Now defined in config.py
         logger.error(f"Backpressure triggered. Buffer size: {current_size}")
         raise HTTPException(
-            status_code=503,
-            detail="System is currently overloaded. Retry in 30 seconds."
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="System is currently overloaded. Retry later."
         )
 
     # 3. FACADE CALL: Delegate to Ingestion Service
-    # The service handles enveloping, UUID generation, and pushing to Redis.
     try:
-        # We pass the full request to the service to keep the router 'thin'
+        # The ingestion_service will now convert these raw dicts
+        # into LogEnvelope objects from common.
         ingestion_id = await ingestion_service.ingest_batch(
             logs=request.logs,
             tenant_id=tenant_id,
@@ -62,11 +64,10 @@ async def ingest_logs(request: LogRequest, http_request: Request):
     except Exception as e:
         logger.error(f"Ingestion failed for tenant {tenant_id}: {e}")
         raise HTTPException(
-            status_code=500,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal error: Failed to buffer logs."
         )
 
-    # 4. RESPONSE
     return {
         "status": "accepted",
         "ingestion_id": ingestion_id,

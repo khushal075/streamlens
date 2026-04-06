@@ -4,6 +4,8 @@ Kafka Producer Implementation
 Role: Concrete implementation of the BaseProducer using AIOKafka.
 Strategy: High-throughput async batching with Snappy compression
           and Tenant-aware partitioning.
+
+Movement: Redis --> Kafka Worker --> Kafka Topic
 """
 
 import orjson

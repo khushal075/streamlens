@@ -63,5 +63,5 @@ messaging_producer = MessagingFactory.get_producer()
 def get_producer():
     return MessagingFactory.get_producer()
 
-def get_consumer(topic: str, group_id: str):
+def get_consumer(topic: str, group_id: str) -> KafkaConsumer:
     return MessagingFactory.get_consumer(topic, group_id)

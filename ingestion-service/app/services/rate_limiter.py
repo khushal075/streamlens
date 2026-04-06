@@ -12,7 +12,7 @@ Purpose:
 import time
 import logging
 from typing import Optional
-import aioredis
+from redis import asyncio as aioredis
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)

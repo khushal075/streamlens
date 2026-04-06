@@ -16,7 +16,7 @@ from app.api.logs import router as logs_router
 from app.services.buffer import log_buffer
 from app.services.storage_service import storage_service
 # Import the class-based worker instances
-from app.workers.kafka_worker import kafka_ingestion_worker
+from app.workers.kafka_worker import run_worker as kafka_ingestion_worker
 from app.workers.clickhouse_worker import ch_worker
 
 # Setup logging configuration
@@ -36,33 +36,31 @@ async def lifespan(app: FastAPI):
     await log_buffer.connect()
 
     # 2. Launch Background Workers
-    # We use asyncio.create_task to run the class-based .start() methods
-    # These are managed as 'State' so we can access them during shutdown
-    app.state.kafka_task = asyncio.create_task(kafka_ingestion_worker.start())
-    app.state.ch_task = asyncio.create_task(ch_worker.start())
+    # 💡 FIX: We call the functions directly.
+    # These functions internally create the Class and run the .start() loop.
+    app.state.kafka_task = asyncio.create_task(kafka_ingestion_worker())
+    app.state.ch_task = asyncio.create_task(ch_worker())
 
-    logger.info("✅ [Startup] API, Kafka Worker, and ClickHouse Worker are active.")
+    logger.info("✅ [Startup] API and Workers are now active ...")
 
     yield
 
     # --- SHUTDOWN ---
     logger.info("🛑 [Shutdown] Stopping services...")
 
-    # 1. Signal Workers to stop (Triggers the internal .stop() logic)
-    kafka_ingestion_worker.is_running = False
-    ch_worker.is_running = False
-
-    # 2. Cancel the tasks and wait for them to finish their final batch
+    # 1. Cancel the tasks.
+    # Since our workers handle asyncio.CancelledError, they will
+    # trigger their own .stop() logic internally!
     for task_name, task in [("Kafka", app.state.kafka_task), ("ClickHouse", app.state.ch_task)]:
         task.cancel()
         try:
-            await task
-            logger.info(f"Worker task '{task_name}' stopped gracefully.")
-        except asyncio.CancelledError:
-            pass
+            # Give them a moment to finish the current batch
+            await asyncio.wait_for(task, timeout=5.0)
+        except (asyncio.CancelledError, asyncio.TimeoutError):
+            logger.info(f"Worker task '{task_name}' stopped.")
 
-    # 3. Final Cleanup of DB Clients
-    await storage_service.clickhouse_client.close()
+    # 2. Final Cleanup
+    await log_buffer.disconnect()
     logger.info("👋 [Shutdown] Cleanup complete. System offline.")
 
 
