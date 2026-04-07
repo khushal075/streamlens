@@ -123,7 +123,7 @@ StreamLens includes out-of-the-box monitoring:
 
 ---
 
-## 💡 Engineering Highlights (Portfolio Focus)
+## 💡 Engineering Highlights
 
 * **Scalability:** Services are stateless. Scaling the `processing-service` to 10 pods instantly increases throughput across Kafka partitions.
 * **Fault Tolerance:** If ClickHouse goes offline, Kafka retains data for 7 days (configurable), allowing the system to "catch up" without data loss.
