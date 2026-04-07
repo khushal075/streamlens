@@ -87,7 +87,7 @@ class KafkaProducer(BaseProducer):
 
                 # 3. Create the send task
                 task = self.producer.send(
-                    topic=settings.KAFKA_TOPIC,
+                    topic=settings.KAFKA_TOPIC_INGESTED,
                     key=key,
                     value=binary_data
                 )
