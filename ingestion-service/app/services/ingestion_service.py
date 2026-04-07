@@ -47,7 +47,7 @@ class IngestionService:
                     origin_ip=client_ip,
                     timestamp=get_current_utc(),
                     # Extracting data from the raw input
-                    message=log.get("message", "") if isinstance(log, dict) else getattr(log, 'message', ""),
+                    raw_payload=log.get("message", "") if isinstance(log, dict) else getattr(log, 'message', ""),
                     metadata=log.get("metadata", {}) if isinstance(log, dict) else getattr(log, 'metadata', {}),
                     source=log.get("source", "generic").lower() if isinstance(log, dict) else getattr(log, 'source', 'generic').lower()
                 ).model_dump() # Convert to dict for Redis storage
