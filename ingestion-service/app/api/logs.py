@@ -44,7 +44,7 @@ async def ingest_logs(request: IngestionRequest, http_request: Request):
 
     # 2. BACKPRESSURE: Check Buffer Health (Using settings from common)
     current_size = await log_buffer.get_buffer_size()
-    if current_size > settings.MAX_QUEUE_THRESHOLD: # Now defined in config.py
+    if current_size > settings.MAX_QUEUE_SIZE: # Now defined in config.py
         logger.error(f"Backpressure triggered. Buffer size: {current_size}")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
