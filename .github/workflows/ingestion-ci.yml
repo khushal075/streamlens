@@ -74,3 +74,4 @@ jobs:
           # Optional: helps identify this specific service in the dashboard
           flags: ingestion-service
           fail_ci_if_error: true
+          verbose: true # This will tell us exactly why it fails if it does
