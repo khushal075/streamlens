@@ -35,25 +35,26 @@ jobs:
         with:
           virtualenvs-create: true
           virtualenvs-in-project: true
-          installer-metadata-cache: true
 
       - name: Load cached venv
         id: cached-poetry-dependencies
         uses: actions/cache@v3
         with:
           path: ingestion-service/.venv
-          key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+          # Fixed path to lock file and added python version to key
+          key: venv-${{ runner.os }}-py3.11-${{ hashFiles('ingestion-service/poetry.lock') }}
+          restore-keys: |
+            venv-${{ runner.os }}-py3.11-
 
       - name: Install Dependencies
-        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+        # Even if cache hits, run install to ensure everything is synced
         run: poetry install --no-interaction --no-root
 
       - name: Run Pytest with Coverage
         run: |
-          # Use 'poetry run' to execute pytest within the managed environment
+          # The --cov=app flag ensures we are only measuring your source code
           poetry run pytest --cov=app --cov-report=term-missing --cov-fail-under=81
 
       - name: Lint with Flake8
         run: |
-          # If flake8 is in your pyproject.toml dev-dependencies:
           poetry run flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
