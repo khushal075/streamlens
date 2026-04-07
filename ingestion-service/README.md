@@ -22,20 +22,27 @@ A specialized fleet of background workers then drains this buffer, applies trans
 
 StreamLens operates on a **decoupled pipeline** to ensure that a spike in log volume never crashes the API or slows down the application source.
 
-graph TD
-    A[Source Systems] -->|POST /logs| B[FastAPI Ingestion]
-    B -->|LPUSH| C[(Redis Buffer)]
-    C -->|BRPOP| D[Kafka Worker]
-    D -->|Transform & Produce| E{Kafka Broker}
-    E -->|Consume| F[ClickHouse Worker]
-    F -->|Batch Insert| G[(ClickHouse DB)]
-    E -->|Archive| H[(S3/Parquet)]
-    
-    style B fill:#f9f,stroke:#333,stroke-width:2px
-    style C fill:#f66,stroke:#333,stroke-width:2px
-    style E fill:#fb1,stroke:#333,stroke-width:2px
-    style G fill:#0cf,stroke:#333,stroke-width:2px
-
+```
+┌──────────────────────┐      ┌──────────────────────┐      ┌──────────────────────┐
+│   Source Systems     │      │   Ingestion Layer    │      │    Storage Layer     │
+│ (K8s, Apps, Syslog)  │      │      (FastAPI)       │      │     (ClickHouse)     │
+└──────────┬───────────┘      └──────────┬───────────┘      └──────────┬───────────┘
+           │                             │                             ▲
+           │ 1. POST /api/v1/logs        │                             │
+           └────────────────────────────►│                             │ 4. Batch Insert
+                                         │                             │
+                                 ┌───────┴───────┐             ┌───────┴───────┐
+                                 │ Durable Buffer│             │ Message Broker│
+                                 │    (Redis)    │             │    (Kafka)    │
+                                 └───────┬───────┘             └───────▲───────┘
+                                         │                             │
+                                         │ 2. Pop & Transform          │ 3. Produce
+                                         │                             │
+                                 ┌───────▼───────┐             ┌───────┴───────┐
+                                 │  Ingest Worker│             │  Sink Worker  │
+                                 │ (Kafka Prod)  │             │ (CH Consumer) │
+                                 └───────────────┘             └───────────────┘
+```
 
 ### The Data Lifecycle
 1. **Ingestion Layer (API)**: FastAPI validates payloads and pushes to Redis (**Movement A**). 
