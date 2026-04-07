@@ -30,6 +30,7 @@ class GlobalSettings(BaseSettings):
     CLICKHOUSE_USER: str = "default"
     CLICKHOUSE_PASSWORD: str = ""
     CLICKHOUSE_DATABASE: str = "streamlens"
+    CLICKHOUSE_BATCH_SIZE: int = 1000
 
     # This is the "Magic" part. It tells child classes to look for a .env file
     # in their current working directory.
