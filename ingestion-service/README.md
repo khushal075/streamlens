@@ -1,142 +1,194 @@
 # 🟢 StreamLens — High-Throughput Log Ingestion Engine
 
-[![CI Build](https://github.com/khushal075/streamlens/actions/workflows/ingestion-ci.yml/badge.svg)](https://github.com/khushal075/streamlens/actions/workflows/ingestion-ci.yml)
-[![Coverage](https://img.shields.io/badge/Coverage-81%25-success)](https://github.com/khushal075/streamlens/actions/workflows/ingestion-ci.yml)
-[![Python Version](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688.svg)](https://fastapi.tiangolo.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
-**StreamLens** is a production-grade log ingestion platform designed for real-time observability at scale. It acts as a **Reliable Relay** between distributed applications and analytical data stores, ensuring every log is parsed, enriched, and safely persisted via a decoupled, fault-tolerant architecture.
+A production-grade log ingestion platform designed for real-time observability at scale. Built to demonstrate high-concurrency patterns, durable buffering, and automated data archival. StreamLens acts as a reliable bridge between distributed applications and analytical data stores, ensuring every log is parsed, enriched, and safely persisted.
 
 ---
 
-## 🏗 System Architecture
+## What It Does
 
-StreamLens solves the "Slow Consumer" problem using a **Durable Write-Ahead Buffer** pattern. Incoming traffic is immediately offloaded to Redis, allowing the API to maintain ultra-low latency even during downstream Kafka or ClickHouse pressure.
+StreamLens provides a multi-tenant API to receive raw, unstructured logs from various sources (Kubernetes, Docker, Cisco, etc.). It solves the "slow consumer" problem by immediately offloading incoming data to a high-speed Redis buffer, returning a `202 Accepted` to the client in milliseconds.
 
-
-
-### The Data Lifecycle
-1.  **Ingestion Layer (API)**: FastAPI validates payloads and pushes to Redis (**Movement A**).
-2.  **Enrichment Layer (Kafka Worker)**: Drains Redis, applies transformation strategies, and produces to Kafka.
-3.  **Persistence Layer (ClickHouse Worker)**: Consumes from Kafka and performs high-speed batch inserts into ClickHouse (**Movement B**).
-4.  **Archival Layer**: Simultaneously converts batches to compressed Parquet for S3 cold storage.
+A specialized fleet of background workers then drains this buffer, applies transformation strategies (Regex/JSON enrichment), and facilitates a **Reliable Relay** to Kafka and ClickHouse.
 
 ---
 
-## ⚡ Key Engineering Patterns
+## Architecture
 
-### 1. Strategy Pattern (Log Transformation)
-The system uses a **Strategy Pattern** for log enrichment. Each log source (Kubernetes, Docker, Cisco) has a dedicated `Processor` class. This makes the system **Open/Closed**: you can add support for a new log format by adding a single class without touching the core worker logic.
-
-### 2. Observer Pattern (Worker Polling)
-The `KafkaWorker` implements an **Observer-style** polling loop on Redis. It utilizes `BRPOP` (Blocking Right Pop) to ensure zero-CPU waste when the queue is empty, while maintaining near-instant reactivity when data arrives.
-
-### 3. Reliable Relay & At-Least-Once Delivery
-To prevent data loss:
-* **Kafka Production**: Records are only cleared from the Redis buffer after a successful Kafka `ACK`.
-* **ClickHouse Insertion**: Kafka offsets are only committed *after* ClickHouse confirms a successful batch write.
+StreamLens operates on a **decoupled pipeline** to ensure that a spike in log volume never crashes the API or slows down the application source.
 
 
+
+```
+┌──────────────────────┐      ┌──────────────────────┐      ┌──────────────────────┐
+│   Source Systems     │      │   Ingestion Layer    │      │    Storage Layer     │
+│ (K8s, Apps, Syslog)  │      │      (FastAPI)       │      │     (ClickHouse)     │
+└──────────┬───────────┘      └──────────┬───────────┘      └──────────┬───────────┘
+           │                             │                             ▲
+           │ 1. POST /api/v1/logs        │                             │
+           └────────────────────────────►│                             │ 4. Batch Insert
+                                         │                             │
+                                 ┌───────┴───────┐             ┌───────┴───────┐
+                                 │ Durable Buffer│             │ Message Broker│
+                                 │    (Redis)    │             │    (Kafka)    │
+                                 └───────┬───────┘             └───────▲───────┘
+                                         │                             │
+                                         │ 2. Pop & Transform          │ 3. Produce
+                                         │                             │
+                                 ┌───────▼───────┐             ┌───────┴───────┐
+                                 │  Ingest Worker│             │  Sink Worker  │
+                                 │ (Kafka Prod)  │             │ (CH Consumer) │
+                                 └───────────────┘             └───────────────┘
+```
+
+### The "Reliable Relay" Pattern
+
+To prevent data loss during network partitions or database outages:
+1. **Movement A**: Logs are buffered in Redis. The `KafkaWorker` only removes them once successfully acknowledged by the Kafka Broker.
+2. **Movement B**: The `ClickHouseWorker` uses **At-Least-Once** delivery. It only commits Kafka offsets *after* ClickHouse confirms a successful batch insert.
 
 ---
 
-## 🛠 Tech Stack
+## Data Pipeline
+
+The system uses a **Strategy Pattern** for log enrichment. The transformation logic is decoupled from the worker loop, allowing for easy extension to new log formats.
+
+```
+Raw Payload (JSON/String)
+         │
+         ▼
+┌─────────────────────────────────┐
+│     Enrichment Strategy         │
+│ - Detect Source (K8s/Docker)    │
+│ - Apply Regex Patterns          │
+│ - Inject Metadata (Tenant ID)   │
+└────────────────┬────────────────┘
+                 │
+                 ▼
+┌─────────────────────────────────┐
+│     Batching Engine             │
+│ - Aggregate 1,000+ records      │
+│ - Compression (Snappy/Gzip)     │
+└────────────────┬────────────────┘
+                 │
+                 ▼
+          Kafka / S3 Parquet
+```
+
+---
+
+## Tech Stack
 
 | Layer | Technology |
-| :--- | :--- |
+|---|---|
 | **API Framework** | FastAPI (Asynchronous) |
-| **Primary Buffer** | Redis (LPUSH / BRPOP) |
+| **Primary Buffer** | Redis (LPUSH/BRPOP) |
 | **Message Broker** | Kafka (aiokafka) |
-| **Analytics DB** | ClickHouse (Batch Optimized) |
-| **Cold Storage** | AWS S3 / MinIO (Parquet) |
-| **Configuration** | Pydantic Settings v2 |
-| **Test Suite** | Pytest (81% Coverage) |
+| **Hot Analytics** | ClickHouse |
+| **Cold Storage** | AWS S3 (Parquet format) |
+| **Config Management** | Pydantic Settings v2 |
+| **Testing** | Pytest + Coverage (81%+) |
+| **Packaging** | Poetry |
 
 ---
 
-## 🚀 Running the Project
+## Running the Project
 
-### Option 1: Local Development
-**Prerequisites:** Python 3.11+, Poetry, Redis, Kafka, ClickHouse.
+### Option 1 — Local Development
+
+**Prerequisites:** Python 3.11+, Redis, Kafka, ClickHouse
 
 ```bash
-# 1. Clone & Install
-git clone https://github.com/khushal075/streamlens.git
+# 1. Clone and Install
+git clone <repo-url>
 cd ingestion-service
 poetry install
 
-# 2. Start Services
+# 2. Setup Environment
+cp .env.example .env
+```
+
+**Start the Stack:**
+```bash
 # Terminal 1: API
 poetry run uvicorn app.main:app --reload
 
-# Terminal 2: Ingest Worker (Redis -> Kafka)
+# Terminal 2: Redis-to-Kafka Worker
 poetry run python -m app.workers.kafka_worker
 
-# Terminal 3: Sink Worker (Kafka -> ClickHouse)
+# Terminal 3: Kafka-to-ClickHouse Worker
 poetry run python -m app.workers.clickhouse_worker
 ```
 
-### Option 2: Docker Compose (Full Stack)
+---
+
+### Option 2 — Docker Compose
+
 ```bash
 docker compose up --build
 ```
 
----
-
-## 🧪 Quality Assurance
-
-We maintain a strict quality gate to ensure the reliability of the ingestion pipeline.
-
-* **Linting**: `flake8` (Strict exclusion of library dependencies).
-* **Unit Testing**: Comprehensive mocking of Kafka and ClickHouse drivers.
-* **Coverage Gate**: **81%** (Minimum 80% required to pass CI).
-
-```bash
-# Run tests with coverage
-poetry run pytest --cov=app --cov-report=term-missing
-```
+| Service | Port | Role |
+|---|---|---|
+| `ingestion_api` | 8000 | Log acceptance |
+| `kafka_worker` | — | Enrichment & Production |
+| `clickhouse_worker` | — | Persistence |
+| `redis` | 6379 | Internal Buffer |
+| `clickhouse` | 8123 | Analytics DB |
 
 ---
 
-## 📝 API Reference
+## API Reference
 
-### Batch Log Ingestion
+### Batch Ingest Logs
 `POST /api/v1/logs`
 
-**Header:** `X-Tenant-ID: customer_01`
+**Header:** `X-Tenant-ID: <id>`
 
-**Example Request:**
 ```bash
 curl -X POST http://localhost:8000/api/v1/logs \
-  -H "X-Tenant-ID: customer_01" \
-  -H "Content-Type: application/json" \
+  -H "X-Tenant-ID: customer_alpha" \
   -d '{
     "source": "kubernetes",
-    "logs": [{"raw_payload": "{\"status\": \"error\", \"code\": 500}", "timestamp": 1712445000}]
+    "logs": [{"raw_payload": "user_login_success", "timestamp": 1712445000}]
   }'
 ```
 
 ---
 
-## 📂 Project Structure
+## Project Structure
 
-```text
+```
 ingestion-service/
 ├── app/
-│   ├── api/             # FastAPI routes, Middleware, & Rate Limiting
-│   ├── workers/         # Background Workers (Kafka & ClickHouse loops)
+│   ├── api/             # FastAPI routes & Rate Limiters
+│   ├── workers/         # Movement A (Kafka) & Movement B (CH) Workers
 │   ├── services/
-│   │   └── processors/  # Strategy Pattern: Log Transformation logic
-│   ├── messaging/       # Kafka Client Factories (aiokafka)
-│   ├── storage/         # ClickHouse & S3/Parquet Providers
+│   │   └── processors/  # Strategy Pattern Transformation logic
+│   ├── messaging/       # Kafka Client Factories (Producer/Consumer)
+│   ├── storage/         # ClickHouse & S3/Parquet Adapters
 │   ├── queue/           # Redis connection logic
 │   └── models/          # Pydantic Schemas (LogRecord, BatchRequest)
-├── tests/               # Unit/Integration tests (Pytest)
-└── k8s/                 # Production Manifests (API, Workers, HPA)
+├── tests/               # Unit/Integration tests (81% Coverage)
+└── k8s/                 # Deployment, ConfigMaps, and HPA
 ```
 
 ---
 
-## ⚖️ License
-Distributed under the MIT License. See `LICENSE` for more information.
+## Key Design Decisions
+
+**Durable Write-Ahead Buffering** — By using Redis as an intermediary, we decouple the API's availability from Kafka's availability.
+
+**ThreadPool Transformation** — Log parsing is CPU-bound. Workers offload transformation to a `ThreadPoolExecutor` to prevent blocking the event loop's IO operations.
+
+**Batch Persistance** — ClickHouse performance is dependent on large inserts. The `ClickHouseWorker` aggregates messages into 1.0MB+ batches before committing, drastically reducing disk IO.
+
+**Environmental Parity** — CI/CD overrides `BATCH_SIZE` to 1,000 for load testing, while dev defaults to 500. This is handled via Pydantic Settings without code changes.
+
+---
+
+## Requirements
+
+- Python 3.11+
+- Poetry
+- Docker & Docker Compose
+- 4GB+ RAM (Required for Kafka + ClickHouse local stack)
