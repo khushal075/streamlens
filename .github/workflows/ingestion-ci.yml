@@ -20,7 +20,6 @@ jobs:
 
     defaults:
       run:
-        # Ensures all commands run inside the service directory
         working-directory: ./ingestion-service
 
     steps:
@@ -43,28 +42,35 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ingestion-service/.venv
-          # Added python version and explicit path to lock file for better cache hits
           key: venv-${{ runner.os }}-py3.11-${{ hashFiles('ingestion-service/poetry.lock') }}
           restore-keys: |
             venv-${{ runner.os }}-py3.11-
 
       - name: Install Dependencies
-        # We run install even on cache hit to ensure the environment is synced
         run: poetry install --no-interaction --no-root
 
       - name: Run Pytest with Coverage
-        # These env vars fix the 'AssertionError: 500 == 1000'
-        # and match your local .env configuration
         env:
           BATCH_SIZE: 1000
           CLICKHOUSE_BATCH_SIZE: 1000
           ENVIRONMENT: testing
           DEBUG: "true"
         run: |
-          # We set the gate to 80% to match your current progress
-          poetry run pytest --cov=app --cov-report=term-missing --cov-fail-under=80
+          # Added --cov-report=xml so Codecov has a file to upload
+          poetry run pytest --cov=app --cov-report=term-missing --cov-report=xml --cov-fail-under=80
 
       - name: Lint with Flake8
         run: |
-          # The --exclude flag ensures we don't lint our library dependencies
           poetry run python -m flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics --exclude=.venv,**/__pycache__
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          # Use the secret you just added to GitHub
+          token: ${{ secrets.CODECOV_TOKEN }}
+          # Path to the xml file generated in the pytest step
+          # Note: The path is relative to the root, but we are in ingestion-service
+          files: ./ingestion-service/coverage.xml
+          # Optional: helps identify this specific service in the dashboard
+          flags: ingestion-service
+          fail_ci_if_error: true
