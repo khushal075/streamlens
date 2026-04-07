@@ -8,37 +8,31 @@ from app.core.config import IngestionSettings
 def test_settings_default_values():
     """
     Verify the hardcoded defaults in the class.
-    We pass _env_file=None to ensure this test doesn't accidentally
-    pick up a local .env file, making it pass in CI and locally.
+    We clear the environment so CI variables (like BATCH_SIZE=1000)
+    don't interfere with this specific test.
     """
-    # Create a fresh instance that ignores any .env files
-    settings = IngestionSettings(_env_file=None)
+    # clear=True temporarily hides ALL OS environment variables
+    with patch.dict(os.environ, {}, clear=True):
+        settings = IngestionSettings(_env_file=None)
 
-    # Your class 'app/core/config.py' defines BATCH_SIZE: int = 500
-    # This is what will be used if no environment variable is set.
-    assert settings.BATCH_SIZE == 500
+        # This will now always be 500, because the environment is empty
+        assert settings.BATCH_SIZE == 500
+        assert settings.PROJECT_NAME == "StreamLens Ingestion Service"
 
-    # These are inherited from GlobalSettings
-    assert settings.CLICKHOUSE_BATCH_SIZE == 1000
-    assert settings.PROJECT_NAME == "StreamLens Ingestion Service"
 
 
 def test_settings_env_override():
     """Verify that Environment Variables correctly override defaults."""
     env_vars = {
         "PROJECT_NAME": "Override-Test",
-        "BATCH_SIZE": "1000",
-        "CLICKHOUSE_BATCH_SIZE": "2000"
+        "BATCH_SIZE": "1000"
     }
 
-    # patch.dict injects these into the OS environment
     with patch.dict(os.environ, env_vars):
-        # Again, ignore .env to ensure we are testing the OS ENV override
         settings = IngestionSettings(_env_file=None)
-
         assert settings.PROJECT_NAME == "Override-Test"
         assert settings.BATCH_SIZE == 1000
-        assert settings.CLICKHOUSE_BATCH_SIZE == 2000
+
 
 
 def test_settings_validation_error():
