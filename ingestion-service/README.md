@@ -1,142 +1,142 @@
-# 🟢 StreamLens Ingestion Service
+# 🟢 StreamLens — High-Throughput Log Ingestion Engine
 
-[![CI](https://github.com/khushal075/streamlens/actions/workflows/ci.yml/badge.svg)](https://github.com/khushal075/streamlens/actions/workflows/ci.yml)
-[![Python 3.14](https://img.shields.io/badge/python-3.14-blue.svg)](https://www.python.org/downloads/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.109.0-009688.svg)](https://fastapi.tiangolo.com/)
+[![CI Build](https://github.com/khushal075/streamlens/actions/workflows/ingestion-ci.yml/badge.svg)](https://github.com/khushal075/streamlens/actions/workflows/ingestion-ci.yml)
+[![Coverage](https://img.shields.io/badge/Coverage-81%25-success)](https://github.com/khushal075/streamlens/actions/workflows/ingestion-ci.yml)
+[![Python Version](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688.svg)](https://fastapi.tiangolo.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**StreamLens** is a high-performance, multi-tenant log ingestion engine designed for real-time observability. It acts as a reliable bridge between distributed applications and analytical data stores, ensuring data is parsed, enriched, and safely persisted.
+**StreamLens** is a production-grade log ingestion platform designed for real-time observability at scale. It acts as a **Reliable Relay** between distributed applications and analytical data stores, ensuring every log is parsed, enriched, and safely persisted via a decoupled, fault-tolerant architecture.
 
 ---
 
 ## 🏗 System Architecture
 
-StreamLens operates a **Reliable Relay** model across two distinct data movements:
+StreamLens solves the "Slow Consumer" problem using a **Durable Write-Ahead Buffer** pattern. Incoming traffic is immediately offloaded to Redis, allowing the API to maintain ultra-low latency even during downstream Kafka or ClickHouse pressure.
 
 
 
-### 1️⃣ Movement A: Ingestion & Enrichment
-* **API Layer**: FastAPI receives batches of raw logs and performs tenant-level rate limiting.
-* **Durable Buffer**: Logs are immediately offloaded to **Redis** to ensure low-latency responses (HTTP 202).
-* **Kafka Worker**: A dedicated background process that drains Redis, applies **Regex/JSON Transformations** via a Strategy Pattern, and pushes structured data to **Kafka**.
-
-### 2️⃣ Movement B: Persistence & Archival
-* **ClickHouse Worker**: Subscribes to Kafka topics and performs high-speed **Batch Inserts** into **ClickHouse**.
-* **Data Lake Archiver**: Simultaneously converts log batches into compressed **Parquet** files for long-term storage in **S3**.
+### The Data Lifecycle
+1.  **Ingestion Layer (API)**: FastAPI validates payloads and pushes to Redis (**Movement A**).
+2.  **Enrichment Layer (Kafka Worker)**: Drains Redis, applies transformation strategies, and produces to Kafka.
+3.  **Persistence Layer (ClickHouse Worker)**: Consumes from Kafka and performs high-speed batch inserts into ClickHouse (**Movement B**).
+4.  **Archival Layer**: Simultaneously converts batches to compressed Parquet for S3 cold storage.
 
 ---
 
-## ⚡ Key Features
+## ⚡ Key Engineering Patterns
 
-* **Smart Parsing**: Automatic detection and parsing for Docker, Kubernetes, Cisco, and generic JSON logs.
-* **Threaded Transformation**: Uses a `ThreadPoolExecutor` to handle CPU-intensive Regex parsing without blocking the IO loop.
-* **At-Least-Once Delivery**: Kafka offsets are only committed after successful database confirmation.
-* **Columnar Archival**: Built-in support for Snappy-compressed Parquet archival to S3/MinIO.
-* **Adaptive Back-off**: Workers automatically slow down during downstream outages to prevent cascading failures.
+### 1. Strategy Pattern (Log Transformation)
+The system uses a **Strategy Pattern** for log enrichment. Each log source (Kubernetes, Docker, Cisco) has a dedicated `Processor` class. This makes the system **Open/Closed**: you can add support for a new log format by adding a single class without touching the core worker logic.
+
+### 2. Observer Pattern (Worker Polling)
+The `KafkaWorker` implements an **Observer-style** polling loop on Redis. It utilizes `BRPOP` (Blocking Right Pop) to ensure zero-CPU waste when the queue is empty, while maintaining near-instant reactivity when data arrives.
+
+### 3. Reliable Relay & At-Least-Once Delivery
+To prevent data loss:
+* **Kafka Production**: Records are only cleared from the Redis buffer after a successful Kafka `ACK`.
+* **ClickHouse Insertion**: Kafka offsets are only committed *after* ClickHouse confirms a successful batch write.
+
+
 
 ---
 
-## 🛠 Project Structure
+## 🛠 Tech Stack
+
+| Layer | Technology |
+| :--- | :--- |
+| **API Framework** | FastAPI (Asynchronous) |
+| **Primary Buffer** | Redis (LPUSH / BRPOP) |
+| **Message Broker** | Kafka (aiokafka) |
+| **Analytics DB** | ClickHouse (Batch Optimized) |
+| **Cold Storage** | AWS S3 / MinIO (Parquet) |
+| **Configuration** | Pydantic Settings v2 |
+| **Test Suite** | Pytest (81% Coverage) |
+
+---
+
+## 🚀 Running the Project
+
+### Option 1: Local Development
+**Prerequisites:** Python 3.11+, Poetry, Redis, Kafka, ClickHouse.
+
+```bash
+# 1. Clone & Install
+git clone https://github.com/khushal075/streamlens.git
+cd ingestion-service
+poetry install
+
+# 2. Start Services
+# Terminal 1: API
+poetry run uvicorn app.main:app --reload
+
+# Terminal 2: Ingest Worker (Redis -> Kafka)
+poetry run python -m app.workers.kafka_worker
+
+# Terminal 3: Sink Worker (Kafka -> ClickHouse)
+poetry run python -m app.workers.clickhouse_worker
+```
+
+### Option 2: Docker Compose (Full Stack)
+```bash
+docker compose up --build
+```
+
+---
+
+## 🧪 Quality Assurance
+
+We maintain a strict quality gate to ensure the reliability of the ingestion pipeline.
+
+* **Linting**: `flake8` (Strict exclusion of library dependencies).
+* **Unit Testing**: Comprehensive mocking of Kafka and ClickHouse drivers.
+* **Coverage Gate**: **81%** (Minimum 80% required to pass CI).
+
+```bash
+# Run tests with coverage
+poetry run pytest --cov=app --cov-report=term-missing
+```
+
+---
+
+## 📝 API Reference
+
+### Batch Log Ingestion
+`POST /api/v1/logs`
+
+**Header:** `X-Tenant-ID: customer_01`
+
+**Example Request:**
+```bash
+curl -X POST http://localhost:8000/api/v1/logs \
+  -H "X-Tenant-ID: customer_01" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source": "kubernetes",
+    "logs": [{"raw_payload": "{\"status\": \"error\", \"code\": 500}", "timestamp": 1712445000}]
+  }'
+```
+
+---
+
+## 📂 Project Structure
 
 ```text
 ingestion-service/
 ├── app/
-│   ├── api/                # FastAPI Endpoints & Rate Limiting
-│   ├── workers/            # Background Workers (Kafka & ClickHouse)
+│   ├── api/             # FastAPI routes, Middleware, & Rate Limiting
+│   ├── workers/         # Background Workers (Kafka & ClickHouse loops)
 │   ├── services/
-│   │   └── processors/     # Transformation Logic (Strategy Pattern)
-│   ├── messaging/          # Kafka Producer/Consumer Factory
-│   ├── storage/            # ClickHouse & S3/Parquet Providers
-│   ├── queue/              # Redis Integration
-│   └── models/             # Pydantic Schemas
-├── Dockerfile
-└── pyproject.toml
+│   │   └── processors/  # Strategy Pattern: Log Transformation logic
+│   ├── messaging/       # Kafka Client Factories (aiokafka)
+│   ├── storage/         # ClickHouse & S3/Parquet Providers
+│   ├── queue/           # Redis connection logic
+│   └── models/          # Pydantic Schemas (LogRecord, BatchRequest)
+├── tests/               # Unit/Integration tests (Pytest)
+└── k8s/                 # Production Manifests (API, Workers, HPA)
 ```
 
 ---
 
-## 🚀 Getting Started
-
-### 1. Requirements
-* Python 3.12+ (Optimized for 3.14)
-* Redis (Buffer)
-* Kafka (Message Broker)
-* ClickHouse (Hot Analytics)
-
-### 2. Installation
-```bash
-git clone https://github.com/khushal075/streamlens.git
-cd streamlens/ingestion-service
-pip install -r requirements.txt
-```
-
-### 3. Environment Setup
-Create a `.env` file based on `app/core/config.py`:
-```env
-REDIS_URL=redis://localhost:6379/0
-KAFKA_BOOTSTRAP_SERVERS=localhost:9092
-CLICKHOUSE_HOST=localhost
-S3_LOG_BUCKET=streamlens-cold-storage
-```
-
-### 4. Running the Service
-```bash
-# Starts the API + Kafka Worker + ClickHouse Worker in a single event loop
-uvicorn app.main:app --host 0.0.0.0 --port 8000
-```
-
----
-
-## 📝 API Guide
-
-### Ingest Logs
-`POST /api/v1/logs`
-
-**Payload:**
-```json
-{
-  "tenant_id": "cust_99",
-  "source": "kubernetes",
-  "logs": [
-    {
-      "raw_payload": "{\"log\":\"User login successful\",\"container_id\":\"a1b2\"}",
-      "timestamp": 1712445000
-    }
-  ]
-}
-```
-
-**Response (202 Accepted):**
-```json
-{
-  "status": "accepted",
-  "batch_id": "uuid-v4-here",
-  "queue_depth": 450
-}
-```
-
----
-
-## 🔧 Worker Internals
-
-### The Kafka Worker (Movement A)
-Uses the **Observer Pattern** to poll Redis. It offloads transformation to a thread pool:
-```python
-# app/workers/kafka_worker.py
-processed_logs = await loop.run_in_executor(executor, transform_logic, batch)
-```
-
-### The ClickHouse Worker (Movement B)
-Optimized for **Bulk Inserts**. It does not write row-by-row; it gathers Kafka messages into batches of 1,000+ for maximum ClickHouse performance.
-
----
-
-## 📊 Monitoring & Health
-* **Liveness**: `GET /health` returns the current Redis buffer depth.
-* **Metrics**: Prometheus metrics available for tracking transformation latency and Kafka lag (Coming Soon).
-
----
-
-## 💡 License
+## ⚖️ License
 Distributed under the MIT License. See `LICENSE` for more information.
-
----
