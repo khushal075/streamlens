@@ -8,7 +8,7 @@ def test_settings_default_values():
     from app.core.config import settings
 
     # This is the 'BATCH_SIZE' defined in IngestionSettings
-    assert settings.BATCH_SIZE == 500
+    assert settings.BATCH_SIZE == 1000
 
     # This is inherited from GlobalSettings
     assert settings.CLICKHOUSE_BATCH_SIZE == 1000
