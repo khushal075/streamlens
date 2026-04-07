@@ -27,6 +27,24 @@ class LogBuffer:
         self.redis: Optional[aioredis.Redis] = None
         self.BUFFER_KEY = "ingestion:buffer:queue"
 
+    async def push_batch(self, batch: List[Dict[str, Any]]):
+        """Atomically pushes a list of serialized logs to Redis."""
+        if not batch:
+            return
+        try:
+            await self.connect()
+
+            # Ensure this is in buffer.py to prevent the 'datetime' error
+            serialized_batch = [
+                json.dumps(log, default=lambda o: o.isoformat() if hasattr(o, 'isoformat') else str(o))
+                for log in batch
+            ]
+
+            await self.redis.lpush(self.BUFFER_KEY, *serialized_batch)
+        except Exception as e:
+            logger.error(f"Buffer batch push failed: {e}")
+            raise
+
     async def connect(self):
         """Lazy-load the Redis connection to ensure it's created within the async loop."""
         if not self.redis:
