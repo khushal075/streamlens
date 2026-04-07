@@ -1,0 +1,11 @@
+name: Placeholder (Disabled)
+
+on:
+  push:
+    branches: [ "ignore-all-for-now" ] # This branch doesn't exist, so it never triggers
+
+jobs:
+  nothing:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "This service is currently disabled."
