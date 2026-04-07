@@ -71,3 +71,10 @@ async def test_ingest_logs_unexpected_failure():
 
             assert response.status_code == 500
             assert "Internal error" in response.json()["detail"]
+
+
+def test_logs_endpoint_invalid_data():
+    """Targets app/api/logs.py lines 48-49"""
+    # Send an empty or completely wrong JSON to trigger the exception block
+    response = client.post("/api/v1/logs", json={"wrong_key": "bad_value"})
+    assert response.status_code in [400, 422]
