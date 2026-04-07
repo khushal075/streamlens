@@ -172,3 +172,7 @@ ingestion-service/
 
 ## ⚖️ License
 Distributed under the MIT License. See `LICENSE` for more information.
+
+---
+## 📖 Further Documentation
+For a deep dive into the internal design patterns, failure handling, and scaling strategies of this service, see the [Ingestion Design Doc](../docs/ingestion.md).
